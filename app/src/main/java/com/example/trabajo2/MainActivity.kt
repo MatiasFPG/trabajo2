@@ -17,6 +17,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.Image
+import coil.compose.rememberAsyncImagePainter
 import com.example.trabajo2.Services.ApiService
 import com.example.trabajo2.data.ContentBody
 import com.example.trabajo2.data.PartBody
@@ -101,6 +103,9 @@ fun MainScreen() {
     val messages = remember { mutableStateListOf<Message>() }
     val chatHistories = remember { mutableStateListOf<List<Message>>() }
 
+    // Estado para controlar el modo del chat (ACTIVO o LECTURA)
+    var chatMode by remember { mutableStateOf<ChatMode>(ChatMode.ACTIVE) }
+
     if (isInHistory) {
         // Mostrar la pantalla de historial
         HistoryScreen(
@@ -108,11 +113,13 @@ fun MainScreen() {
             onNewChat = {
                 chatHistories.add(messages.toList())  // Guardamos el chat actual
                 messages.clear()  // Borramos los mensajes para un nuevo chat
+                chatMode = ChatMode.ACTIVE  // Reiniciamos el chat a modo activo
                 isInHistory = false  // Volvemos a la pantalla de chat
             },
             onChatSelected = { selectedChat ->
                 messages.clear()
                 messages.addAll(selectedChat)  // Restaurar los mensajes del chat seleccionado
+                chatMode = ChatMode.VIEW_ONLY  // Cuando seleccionamos, empieza en modo de solo lectura
                 isInHistory = false  // Volvemos a la pantalla de chat
             }
         )
@@ -120,10 +127,13 @@ fun MainScreen() {
         // Mostrar la pantalla del chat
         ChatScreen(
             messages = messages,
-            onViewHistory = { isInHistory = true }  // Cambiar a la pantalla de historial
+            onViewHistory = { isInHistory = true },  // Cambiar a la pantalla de historial
+            chatMode = chatMode,  // Pasamos el modo actual del chat
+            onChatModeChange = { newMode -> chatMode = newMode }  // Cambiar el modo de chat
         )
     }
 }
+
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -155,7 +165,7 @@ fun HistoryScreen(
                 // Mostrar los botones de los chats guardados
                 for ((index, chat) in chatHistories.withIndex()) {
                     val firstMessage = chat.firstOrNull() // El primer mensaje del chat
-                    val previewText = firstMessage?.partBody?.text?.take(10) ?: "Chat vacío"  // Los primeros 10 caracteres
+                    val previewText = firstMessage?.partBody?.text?.take(15) ?: "Chat vacío"  // Los primeros 10 caracteres
                     val time = firstMessage?.createdAt ?: "Sin hora"  // La hora de creación
 
                     Button(
@@ -178,11 +188,12 @@ fun HistoryScreen(
 @Composable
 fun ChatScreen(
     messages: SnapshotStateList<Message>,
-    onViewHistory: () -> Unit
+    onViewHistory: () -> Unit,
+    chatMode: ChatMode = ChatMode.ACTIVE, // Nuevo parámetro para el modo de chat
+    onChatModeChange: (ChatMode) -> Unit // Callback para cambiar el modo de chat
 ) {
     var isLoading by remember { mutableStateOf(false) }
 
-    // Mensaje inicial
     LaunchedEffect(Unit) {
         if (messages.isEmpty()) {
             messages.add(
@@ -198,7 +209,24 @@ fun ChatScreen(
     Scaffold(
         modifier = Modifier.fillMaxSize(),
         topBar = { TopBar(onViewHistory) },
-        bottomBar = { BottomBar(messages, isLoading, onLoadingChange = { isLoading = it }) }
+        bottomBar = {
+            if (chatMode == ChatMode.ACTIVE) {
+                // Mostrar el input de texto y el botón de enviar cuando el chat está activo
+                BottomBar(messages, isLoading, onLoadingChange = { isLoading = it })
+            } else {
+                // Mostrar el botón "Continuar chat" cuando el chat está en modo de lectura
+                Button(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    onClick = {
+                        onChatModeChange(ChatMode.ACTIVE) // Cambiar el modo a activo
+                    }
+                ) {
+                    Text("Continuar chat")
+                }
+            }
+        }
     ) { innerPadding ->
         Column(modifier = Modifier.padding(innerPadding)) {
             Column(
@@ -224,6 +252,12 @@ fun ChatScreen(
     }
 }
 
+sealed class ChatMode {
+    object ACTIVE : ChatMode() // Modo activo con input de texto y botón de enviar
+    object VIEW_ONLY : ChatMode() // Modo de solo lectura, sin input ni botón de enviar
+}
+
+
 @Composable
 fun BubbleMessage(message: Message) {
     Row(
@@ -232,6 +266,17 @@ fun BubbleMessage(message: Message) {
             .padding(8.dp),
         horizontalArrangement = if (message.itsMine) Arrangement.End else Arrangement.Start
     ) {
+        // Si el mensaje es de la IA, mostrar la imagen del logo de Minecraft a la izquierda
+        if (!message.itsMine) {
+            Image(
+                painter = rememberAsyncImagePainter(model = R.drawable.ic_minecraft_logo),
+                contentDescription = "Logo de Minecraft",
+                modifier = Modifier
+                    .size(40.dp) // Tamaño de la imagen
+                    .padding(end = 8.dp)
+            )
+        }
+
         Column(
             modifier = Modifier
                 .background(
@@ -252,6 +297,17 @@ fun BubbleMessage(message: Message) {
                 text = message.createdAt,
                 color = Color.Gray,
                 modifier = Modifier.align(Alignment.End)
+            )
+        }
+
+        // Si el mensaje es del usuario, mostrar la imagen de WhatsApp sin perfil a la derecha
+        if (message.itsMine) {
+            Image(
+                painter = rememberAsyncImagePainter(model = R.drawable.ic_user),
+                contentDescription = "Imagen de usuario",
+                modifier = Modifier
+                    .size(40.dp) // Tamaño de la imagen
+                    .padding(start = 8.dp)
             )
         }
     }
