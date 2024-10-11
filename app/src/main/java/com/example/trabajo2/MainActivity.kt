@@ -116,11 +116,11 @@ fun MainScreen() {
         HistoryScreen(
             chatHistories = chatHistories,
             onNewChat = {
-                chatHistories.add(messages.toList())  // Guardar el chat actual
+                chatHistories.add(messages.toList())
                 saveChats(context, chatHistories)
-                messages.clear()  // Limpiar los mensajes para el nuevo chat
-                chatMode = ChatMode.ACTIVE  // Reiniciar el modo de chat a activo
-                isInHistory = false  // Cambiar de nuevo a la pantalla de chat activo
+                messages.clear()
+                chatMode = ChatMode.ACTIVE
+                isInHistory = false
             },
             onChatSelected = { selectedChat ->
                 messages.clear()
@@ -188,7 +188,7 @@ fun HistoryScreen(
                 Column(
                     modifier = Modifier
                         .weight(1f)
-                        .verticalScroll(rememberScrollState())  // Hacer scroll si hay muchos chats
+                        .verticalScroll(rememberScrollState())
                 ) {
                     for ((index, chat) in chatHistories.withIndex()) {
                         val firstMessage = chat.firstOrNull()
@@ -207,7 +207,6 @@ fun HistoryScreen(
                 }
             }
 
-            // Botón "Nuevo chat" pequeño, abajo
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -217,7 +216,7 @@ fun HistoryScreen(
                 Button(
                     modifier = Modifier
                         .width(120.dp)
-                        .padding(top = 8.dp),  // Botón pequeño
+                        .padding(top = 8.dp),
                     onClick = onNewChat
                 ) {
                     Text("Nuevo chat")
