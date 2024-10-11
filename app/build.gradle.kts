@@ -61,17 +61,17 @@ dependencies {
     implementation(libs.material3)
     implementation (libs.retrofit)
     implementation (libs.converter.gson)
-    testImplementation(libs.junit)
-    androidTestImplementation(libs.androidx.junit)
-    androidTestImplementation(libs.androidx.espresso.core)
-    androidTestImplementation(libs.androidx.compose.bom.v20240903)
-    androidTestImplementation(libs.ui.test.junit4)
-    debugImplementation(libs.ui.tooling)
-    debugImplementation(libs.ui.test.manifest)
-    implementation(libs.androidx.compose.ui.ui) // Jetpack Compose UI
-    implementation(libs.androidx.compose.material3.material3) // Material 3
-    implementation(libs.androidx.activity.compose.v172)
-    implementation (libs.androidx.navigation.compose)
-    implementation (libs.coil.compose)
-    implementation (libs.gson)
+    testImplementation("junit:junit:4.13.2")
+    androidTestImplementation("androidx.test.ext:junit:1.2.1")
+    androidTestImplementation("androidx.test.espresso:espresso-core:3.6.1")
+    androidTestImplementation(platform("androidx.compose:compose-bom:2023.03.00"))
+    androidTestImplementation("androidx.compose.ui:ui-test-junit4")
+    debugImplementation("androidx.compose.ui:ui-tooling")
+    debugImplementation("androidx.compose.ui:ui-test-manifest")
+    implementation("androidx.compose.ui:ui:1.5.1") // Jetpack Compose UI
+    implementation("androidx.compose.material3:material3:1.2.0") // Material 3
+    implementation("androidx.activity:activity-compose:1.7.2")
+    implementation ("androidx.navigation:navigation-compose:2.6.0")
+    implementation ("io.coil-kt:coil-compose:2.0.0")
+    implementation ("com.google.code.gson:gson:2.9.0")
 }
