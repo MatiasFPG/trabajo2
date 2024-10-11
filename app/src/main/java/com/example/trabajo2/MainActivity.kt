@@ -43,7 +43,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         setContent {
             Trabajo2Theme {
-                ChatScreen()
+                MainScreen()
             }
         }
     }
@@ -94,28 +94,110 @@ fun sendToApi(apiService: ApiService, apiKey: String, messages: List<Message>, o
     }
 }
 
+@Composable
+fun MainScreen() {
+    // Estado para determinar si estamos en la pantalla de historial o en el chat
+    var isInHistory by remember { mutableStateOf(false) }
+    val messages = remember { mutableStateListOf<Message>() }
+    val chatHistories = remember { mutableStateListOf<List<Message>>() }
+
+    if (isInHistory) {
+        // Mostrar la pantalla de historial
+        HistoryScreen(
+            chatHistories = chatHistories,
+            onNewChat = {
+                chatHistories.add(messages.toList())  // Guardamos el chat actual
+                messages.clear()  // Borramos los mensajes para un nuevo chat
+                isInHistory = false  // Volvemos a la pantalla de chat
+            },
+            onChatSelected = { selectedChat ->
+                messages.clear()
+                messages.addAll(selectedChat)  // Restaurar los mensajes del chat seleccionado
+                isInHistory = false  // Volvemos a la pantalla de chat
+            }
+        )
+    } else {
+        // Mostrar la pantalla del chat
+        ChatScreen(
+            messages = messages,
+            onViewHistory = { isInHistory = true }  // Cambiar a la pantalla de historial
+        )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun HistoryScreen(
+    chatHistories: List<List<Message>>,
+    onNewChat: () -> Unit,
+    onChatSelected: (List<Message>) -> Unit
+) {
+    Scaffold(
+        topBar = { TopAppBar(title = { Text("Historial de Chats") }) },
+        bottomBar = {
+            Button(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(8.dp),
+                onClick = onNewChat
+            ) {
+                Text("Nuevo Chat")
+            }
+        }
+    ) { padding ->
+        Column(modifier = Modifier.padding(padding)) {
+            if (chatHistories.isEmpty()) {
+                Text(
+                    text = "No hay chats guardados",
+                    modifier = Modifier.padding(16.dp)
+                )
+            } else {
+                // Mostrar los botones de los chats guardados
+                for ((index, chat) in chatHistories.withIndex()) {
+                    val firstMessage = chat.firstOrNull() // El primer mensaje del chat
+                    val previewText = firstMessage?.partBody?.text?.take(10) ?: "Chat vacío"  // Los primeros 10 caracteres
+                    val time = firstMessage?.createdAt ?: "Sin hora"  // La hora de creación
+
+                    Button(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(8.dp),
+                        onClick = { onChatSelected(chat) }
+                    ) {
+                        Text("$previewText... - $time")  // Texto del botón con preview y hora
+                    }
+                }
+            }
+        }
+    }
+}
+
 
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ChatScreen() {
-    val messages = remember { mutableStateListOf<Message>() }
+fun ChatScreen(
+    messages: SnapshotStateList<Message>,
+    onViewHistory: () -> Unit
+) {
     var isLoading by remember { mutableStateOf(false) }
 
     // Mensaje inicial
     LaunchedEffect(Unit) {
-        messages.add(
-            Message(
-                itsMine = false,
-                createdAt = getCurrentTime(),
-                partBody = PartBody(text = "Hola, soy tu asistente de Minecraft. ¡Puedo ayudarte con cualquier crafteo que necesites!")
+        if (messages.isEmpty()) {
+            messages.add(
+                Message(
+                    itsMine = false,
+                    createdAt = getCurrentTime(),
+                    partBody = PartBody(text = "Hola, soy tu asistente de Minecraft. ¡Puedo ayudarte con cualquier crafteo que necesites!")
+                )
             )
-        )
+        }
     }
 
     Scaffold(
         modifier = Modifier.fillMaxSize(),
-        topBar = { TopBar() },
+        topBar = { TopBar(onViewHistory) },
         bottomBar = { BottomBar(messages, isLoading, onLoadingChange = { isLoading = it }) }
     ) { innerPadding ->
         Column(modifier = Modifier.padding(innerPadding)) {
@@ -176,7 +258,7 @@ fun BubbleMessage(message: Message) {
 }
 
 @Composable
-fun TopBar(modifier: Modifier = Modifier) {
+fun TopBar(onViewHistory: () -> Unit, modifier: Modifier = Modifier) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -187,7 +269,7 @@ fun TopBar(modifier: Modifier = Modifier) {
         verticalAlignment = Alignment.CenterVertically
     ) {
         Text(text = "Asiste IA", fontSize = 20.sp)
-        Button(onClick = { /* Acá implementan el ver historial */ }) {
+        Button(onClick = onViewHistory) {
             Text(text = "Ver historial")
         }
     }
@@ -277,6 +359,6 @@ fun getCurrentTime() : String {
 @Composable
 fun GreetingPreview() {
     Trabajo2Theme {
-        ChatScreen()
+        MainScreen()
     }
 }
