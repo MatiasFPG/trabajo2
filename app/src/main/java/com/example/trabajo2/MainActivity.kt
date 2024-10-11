@@ -17,6 +17,12 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import android.content.Context
+import android.content.SharedPreferences
+import androidx.compose.ui.platform.LocalContext
+import com.google.gson.Gson
+import com.google.gson.reflect.TypeToken
+import kotlinx.coroutines.launch
 import androidx.compose.foundation.Image
 import coil.compose.rememberAsyncImagePainter
 import com.example.trabajo2.Services.ApiService
@@ -26,18 +32,16 @@ import com.example.trabajo2.data.RequestBody
 import com.example.trabajo2.ui.theme.Trabajo2Theme
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
 import java.time.LocalTime
 import java.time.format.DateTimeFormatter
 import android.graphics.Color as AndroidColor
 
-// Clase para representar un mensaje con información adicional.
 class Message(
-    val itsMine : Boolean,
+    val itsMine: Boolean,
     val partBody: PartBody,
-    val createdAt : String
+    val createdAt: String
 )
 
 class MainActivity : ComponentActivity() {
@@ -51,24 +55,21 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-// Función para hacer la llamada a la API fuera de un contexto @Composable
 fun sendToApi(apiService: ApiService, apiKey: String, messages: List<Message>, onResponse: (String?) -> Unit) {
     val partBodies: List<PartBody> = messages.map { it.partBody }
     val ultimaPregunta = messages.lastOrNull()?.partBody?.text ?: ""
 
-    // Crear un prompt mejorado para la IA
     val promptText = """
         Eres un asistente experto en Minecraft. Los usuarios te preguntan cómo crear objetos y tú debes responder con la receta exacta.
         Pregunta del usuario: "$ultimaPregunta".
         Responde de forma precisa y clara.
     """.trimIndent()
 
-    // Modificar la última parte del mensaje para que incluya el prompt
     val modifiedPartBodies = partBodies.toMutableList()
     if (modifiedPartBodies.isNotEmpty()) {
-        val lastPart = modifiedPartBodies.removeLast() // Sacamos la última parte
-        val newText = "$promptText\n\n${lastPart.text}" // Añadimos el prompt antes del texto original
-        modifiedPartBodies.add(PartBody(text = newText)) // Lo volvemos a agregar modificado
+        val lastPart = modifiedPartBodies.removeLast()
+        val newText = "$promptText\n\n${lastPart.text}"
+        modifiedPartBodies.add(PartBody(text = newText))
     }
 
     val requestBody = RequestBody(
@@ -98,42 +99,70 @@ fun sendToApi(apiService: ApiService, apiKey: String, messages: List<Message>, o
 
 @Composable
 fun MainScreen() {
-    // Estado para determinar si estamos en la pantalla de historial o en el chat
+    val context = LocalContext.current
     var isInHistory by remember { mutableStateOf(false) }
     val messages = remember { mutableStateListOf<Message>() }
     val chatHistories = remember { mutableStateListOf<List<Message>>() }
-
-    // Estado para controlar el modo del chat (ACTIVO o LECTURA)
     var chatMode by remember { mutableStateOf<ChatMode>(ChatMode.ACTIVE) }
 
+    val scope = rememberCoroutineScope()
+
+    LaunchedEffect(Unit) {
+        val savedChats = loadChats(context)
+        chatHistories.addAll(savedChats)
+    }
+
     if (isInHistory) {
-        // Mostrar la pantalla de historial
         HistoryScreen(
             chatHistories = chatHistories,
             onNewChat = {
-                chatHistories.add(messages.toList())  // Guardamos el chat actual
-                messages.clear()  // Borramos los mensajes para un nuevo chat
-                chatMode = ChatMode.ACTIVE  // Reiniciamos el chat a modo activo
-                isInHistory = false  // Volvemos a la pantalla de chat
+                chatHistories.add(messages.toList())  // Guardar el chat actual
+                saveChats(context, chatHistories)
+                messages.clear()  // Limpiar los mensajes para el nuevo chat
+                chatMode = ChatMode.ACTIVE  // Reiniciar el modo de chat a activo
+                isInHistory = false  // Cambiar de nuevo a la pantalla de chat activo
             },
             onChatSelected = { selectedChat ->
                 messages.clear()
-                messages.addAll(selectedChat)  // Restaurar los mensajes del chat seleccionado
-                chatMode = ChatMode.VIEW_ONLY  // Cuando seleccionamos, empieza en modo de solo lectura
-                isInHistory = false  // Volvemos a la pantalla de chat
+                messages.addAll(selectedChat)
+                chatMode = ChatMode.VIEW_ONLY
+                isInHistory = false
             }
         )
     } else {
-        // Mostrar la pantalla del chat
         ChatScreen(
             messages = messages,
-            onViewHistory = { isInHistory = true },  // Cambiar a la pantalla de historial
-            chatMode = chatMode,  // Pasamos el modo actual del chat
-            onChatModeChange = { newMode -> chatMode = newMode }  // Cambiar el modo de chat
+            onViewHistory = {
+                isInHistory = true
+            },
+            chatMode = chatMode,
+            onChatModeChange = { newMode -> chatMode = newMode }
         )
     }
 }
 
+fun saveChats(context: Context, chats: List<List<Message>>) {
+    val sharedPreferences: SharedPreferences = context.getSharedPreferences("chat_prefs", Context.MODE_PRIVATE)
+    val editor = sharedPreferences.edit()
+    val gson = Gson()
+
+    val chatsJson = gson.toJson(chats)
+    editor.putString("chats", chatsJson)
+    editor.apply()
+}
+
+fun loadChats(context: Context): MutableList<List<Message>> {
+    val sharedPreferences: SharedPreferences = context.getSharedPreferences("chat_prefs", Context.MODE_PRIVATE)
+    val gson = Gson()
+    val chatsJson = sharedPreferences.getString("chats", null)
+
+    return if (chatsJson != null) {
+        val type = object : TypeToken<MutableList<List<Message>>>() {}.type
+        gson.fromJson(chatsJson, type)
+    } else {
+        mutableListOf()
+    }
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -143,54 +172,68 @@ fun HistoryScreen(
     onChatSelected: (List<Message>) -> Unit
 ) {
     Scaffold(
-        topBar = { TopAppBar(title = { Text("Historial de Chats") }) },
-        bottomBar = {
-            Button(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(8.dp),
-                onClick = onNewChat
-            ) {
-                Text("Nuevo Chat")
-            }
-        }
+        topBar = { TopAppBar(title = { Text("Historial de Chats") }) }
     ) { padding ->
-        Column(modifier = Modifier.padding(padding)) {
+        Column(
+            modifier = Modifier
+                .padding(padding)
+                .fillMaxSize()
+        ) {
             if (chatHistories.isEmpty()) {
                 Text(
                     text = "No hay chats guardados",
                     modifier = Modifier.padding(16.dp)
                 )
             } else {
-                // Mostrar los botones de los chats guardados
-                for ((index, chat) in chatHistories.withIndex()) {
-                    val firstMessage = chat.firstOrNull() // El primer mensaje del chat
-                    val previewText = firstMessage?.partBody?.text?.take(15) ?: "Chat vacío"  // Los primeros 10 caracteres
-                    val time = firstMessage?.createdAt ?: "Sin hora"  // La hora de creación
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .verticalScroll(rememberScrollState())  // Hacer scroll si hay muchos chats
+                ) {
+                    for ((index, chat) in chatHistories.withIndex()) {
+                        val firstMessage = chat.firstOrNull()
+                        val previewText = firstMessage?.partBody?.text?.take(10) ?: "Chat vacío"
+                        val time = firstMessage?.createdAt ?: "Sin hora"
 
-                    Button(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(8.dp),
-                        onClick = { onChatSelected(chat) }
-                    ) {
-                        Text("$previewText... - $time")  // Texto del botón con preview y hora
+                        Button(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(8.dp),
+                            onClick = { onChatSelected(chat) }
+                        ) {
+                            Text("$previewText... - $time")
+                        }
                     }
+                }
+            }
+
+            // Botón "Nuevo chat" pequeño, abajo
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                horizontalArrangement = Arrangement.Center
+            ) {
+                Button(
+                    modifier = Modifier
+                        .width(120.dp)
+                        .padding(top = 8.dp),  // Botón pequeño
+                    onClick = onNewChat
+                ) {
+                    Text("Nuevo chat")
                 }
             }
         }
     }
 }
 
-
-
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ChatScreen(
     messages: SnapshotStateList<Message>,
     onViewHistory: () -> Unit,
-    chatMode: ChatMode = ChatMode.ACTIVE, // Nuevo parámetro para el modo de chat
-    onChatModeChange: (ChatMode) -> Unit // Callback para cambiar el modo de chat
+    chatMode: ChatMode = ChatMode.ACTIVE,
+    onChatModeChange: (ChatMode) -> Unit
 ) {
     var isLoading by remember { mutableStateOf(false) }
 
@@ -211,16 +254,14 @@ fun ChatScreen(
         topBar = { TopBar(onViewHistory) },
         bottomBar = {
             if (chatMode == ChatMode.ACTIVE) {
-                // Mostrar el input de texto y el botón de enviar cuando el chat está activo
                 BottomBar(messages, isLoading, onLoadingChange = { isLoading = it })
             } else {
-                // Mostrar el botón "Continuar chat" cuando el chat está en modo de lectura
                 Button(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(16.dp),
                     onClick = {
-                        onChatModeChange(ChatMode.ACTIVE) // Cambiar el modo a activo
+                        onChatModeChange(ChatMode.ACTIVE)
                     }
                 ) {
                     Text("Continuar chat")
@@ -253,10 +294,9 @@ fun ChatScreen(
 }
 
 sealed class ChatMode {
-    object ACTIVE : ChatMode() // Modo activo con input de texto y botón de enviar
-    object VIEW_ONLY : ChatMode() // Modo de solo lectura, sin input ni botón de enviar
+    object ACTIVE : ChatMode()
+    object VIEW_ONLY : ChatMode()
 }
-
 
 @Composable
 fun BubbleMessage(message: Message) {
@@ -266,13 +306,12 @@ fun BubbleMessage(message: Message) {
             .padding(8.dp),
         horizontalArrangement = if (message.itsMine) Arrangement.End else Arrangement.Start
     ) {
-        // Si el mensaje es de la IA, mostrar la imagen del logo de Minecraft a la izquierda
         if (!message.itsMine) {
             Image(
                 painter = rememberAsyncImagePainter(model = R.drawable.ic_minecraft_logo),
                 contentDescription = "Logo de Minecraft",
                 modifier = Modifier
-                    .size(40.dp) // Tamaño de la imagen
+                    .size(40.dp)
                     .padding(end = 8.dp)
             )
         }
@@ -300,13 +339,12 @@ fun BubbleMessage(message: Message) {
             )
         }
 
-        // Si el mensaje es del usuario, mostrar la imagen de WhatsApp sin perfil a la derecha
         if (message.itsMine) {
             Image(
                 painter = rememberAsyncImagePainter(model = R.drawable.ic_user),
                 contentDescription = "Imagen de usuario",
                 modifier = Modifier
-                    .size(40.dp) // Tamaño de la imagen
+                    .size(40.dp)
                     .padding(start = 8.dp)
             )
         }
@@ -353,7 +391,7 @@ fun BottomBar(
             modifier = Modifier.weight(1f),
             value = message,
             onValueChange = { message = it },
-            enabled = !isLoading // Desactivamos el input mientras carga
+            enabled = !isLoading
         )
 
         Button(
@@ -394,7 +432,7 @@ fun BottomBar(
                     }
                 }
             },
-            enabled = !isLoading // Desactivar botón mientras carga
+            enabled = !isLoading
         ) {
             if (isLoading) {
                 CircularProgressIndicator(modifier = Modifier.size(24.dp), color = Color.White)
@@ -405,7 +443,7 @@ fun BottomBar(
     }
 }
 
-fun getCurrentTime() : String {
+fun getCurrentTime(): String {
     val now = LocalTime.now()
     val format = DateTimeFormatter.ofPattern("HH:mm")
     return now.format(format)
